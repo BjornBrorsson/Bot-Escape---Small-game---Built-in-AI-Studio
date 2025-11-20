@@ -1,4 +1,3 @@
-
 export enum GameState {
   EXPLORING = 'EXPLORING',
   COMBAT = 'COMBAT',
@@ -18,11 +17,23 @@ export interface Entity {
   name: string;
 }
 
+export type DamageType = 'KINETIC' | 'THERMAL' | 'ELECTRIC' | 'NONE';
+export type AnimationType = 'LASER' | 'EXPLOSION' | 'RAILGUN' | 'ELECTRIC' | 'SHIELD' | 'REPAIR' | 'MELEE';
+
+export interface CombatEffect {
+  type: AnimationType;
+  startTime: number;
+  duration: number;
+  source: 'PLAYER' | 'ENEMY';
+}
+
 export interface Skill {
   id: string;
   name: string;
   description: string;
   type: 'ATTACK' | 'SUPPORT' | 'TECH' | 'DEFENSE';
+  damageType?: DamageType;
+  animation: AnimationType;
   damage?: number; // Base damage or multiplier
   cost?: number; // Could be energy, currently unused
   effect?: string;
@@ -69,6 +80,20 @@ export interface QuestState {
   hasOmniTool: boolean;
 }
 
+export interface PlayerStats {
+  stepsTaken: number;
+  damageDealt: number;
+  damageTaken: number;
+  healingDone: number;
+  scrapsCollected: number;
+  botsRecruited: number;
+  botsLost: number;
+  skillsUsed: Record<string, number>;
+  mostUsedBotId: string;
+  questsCompleted: number;
+  modulesInstalled: number;
+}
+
 export interface Player {
   pos: Position;
   facing: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
@@ -79,11 +104,13 @@ export interface Player {
   inventory: Item[];
   visitedPOIs: Record<string, boolean>;
   quest: QuestState;
+  stats: PlayerStats;
 }
 
 export interface Enemy extends Entity {
   id?: string;
-  type: 'SCRAP_DRONE' | 'HEAVY_MECH' | 'CORE_GUARDIAN' | 'NANITE_SWARM' | 'JUNKER_BEHEMOTH';
+  type: 'SCRAP_DRONE' | 'HEAVY_MECH' | 'CORE_GUARDIAN' | 'NANITE_SWARM' | 'JUNKER_BEHEMOTH' | 'SHIELD_BREAKER' | 'TESLA_DROID' | 'SNIPER_BOT';
+  class: 'SCOUT' | 'ASSAULT' | 'TECH' | 'TANK'; // For weakness calculation
   xpValue: number;
   isBoss?: boolean;
 }
@@ -106,5 +133,6 @@ export enum POIType {
   CACHE = 1,
   DERELICT = 2,
   NPC = 3,
-  POD = 4
+  POD = 4,
+  GUARDIAN = 5
 }

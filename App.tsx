@@ -1,22 +1,75 @@
-
-import React, { useState, useEffect, useCallback } from 'react';
-import { GameState, Player, Enemy, CombatLog, TerrainType, Module, POIType, Bot, Item } from './types';
-import { INITIAL_PLAYER_STATE, ENCOUNTER_CHANCE_BASE, getTerrainAt, getPOIAt, BOT_CLASSES, ITEMS_DB, POD_POS, BOSS_ENEMY, UNIQUE_NAMES, PERSONALITIES, SKILLS_DB, ACID_DAMAGE } from './constants';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { GameState, Player, Enemy, CombatLog, TerrainType, Module, POIType, Bot, Item, Position, CombatEffect, PlayerStats } from './types';
+import { INITIAL_PLAYER_STATE, ENCOUNTER_CHANCE_BASE, getTerrainAt, getPOIAt, BOT_CLASSES, ITEMS_DB, POD_POS, GUARDIAN_POS, BOSS_ENEMY, UNIQUE_NAMES, PERSONALITIES, SKILLS_DB, ACID_DAMAGE, DAMAGE_TYPE_CHART, NPC_TUTORIALS, SCORE_WEIGHTS } from './constants';
 import GameView from './components/GameView';
 import CombatInterface from './components/CombatInterface';
 import ExplorationInterface from './components/ExplorationInterface';
 
-// Helper to create random enemies
 const createEnemy = (playerLevel: number): Enemy => {
   const r = Math.random();
-  if (playerLevel < 3) {
-     if (r > 0.8) return { type: 'HEAVY_MECH', name: 'Heavy Mech', hp: 80, maxHp: 80, xpValue: 40 };
-     return { type: 'SCRAP_DRONE', name: 'Scrap Drone', hp: 40, maxHp: 40, xpValue: 20 };
+  if (playerLevel < 2) {
+     if (r > 0.7) return { type: 'HEAVY_MECH', class: 'TANK', name: 'Heavy Mech', hp: 80, maxHp: 80, xpValue: 40 };
+     return { type: 'SCRAP_DRONE', class: 'SCOUT', name: 'Scrap Drone', hp: 40, maxHp: 40, xpValue: 20 };
   }
-  if (r > 0.9) return { type: 'JUNKER_BEHEMOTH', name: 'Junker Behemoth', hp: 200 + (playerLevel*10), maxHp: 200 + (playerLevel*10), xpValue: 100 };
-  if (r > 0.7) return { type: 'NANITE_SWARM', name: 'Nanite Swarm', hp: 60 + (playerLevel*5), maxHp: 60 + (playerLevel*5), xpValue: 50 };
-  if (r > 0.4) return { type: 'HEAVY_MECH', name: 'Heavy Mech', hp: 100 + (playerLevel*10), maxHp: 100 + (playerLevel*10), xpValue: 40 };
-  return { type: 'SCRAP_DRONE', name: 'Scrap Drone', hp: 50 + (playerLevel*5), maxHp: 50 + (playerLevel*5), xpValue: 25 };
+  if (r > 0.9) return { type: 'JUNKER_BEHEMOTH', class: 'TANK', name: 'Junker Behemoth', hp: 200 + (playerLevel*10), maxHp: 200 + (playerLevel*10), xpValue: 100 };
+  if (r > 0.8) return { type: 'SHIELD_BREAKER', class: 'ASSAULT', name: 'Shield Breaker', hp: 100 + (playerLevel*10), maxHp: 100 + (playerLevel*10), xpValue: 60 };
+  if (r > 0.7) return { type: 'TESLA_DROID', class: 'TECH', name: 'Tesla Droid', hp: 70 + (playerLevel*8), maxHp: 70 + (playerLevel*8), xpValue: 50 };
+  if (r > 0.6) return { type: 'SNIPER_BOT', class: 'SCOUT', name: 'Sniper Bot', hp: 50 + (playerLevel*5), maxHp: 50 + (playerLevel*5), xpValue: 45 };
+  if (r > 0.3) return { type: 'NANITE_SWARM', class: 'TECH', name: 'Nanite Swarm', hp: 60 + (playerLevel*5), maxHp: 60 + (playerLevel*5), xpValue: 35 };
+  return { type: 'SCRAP_DRONE', class: 'SCOUT', name: 'Scrap Drone', hp: 50 + (playerLevel*5), maxHp: 50 + (playerLevel*5), xpValue: 25 };
+};
+
+const findPath = (start: Position, end: Position): Position[] | null => {
+  const queue: { pos: Position, path: Position[] }[] = [{ pos: start, path: [] }];
+  const visited = new Set<string>();
+  visited.add(`${start.x},${start.y}`);
+
+  let iterations = 0;
+  const MAX_ITERATIONS = 1000; 
+
+  while (queue.length > 0) {
+    iterations++;
+    if (iterations > MAX_ITERATIONS) return null;
+
+    const { pos, path } = queue.shift()!;
+
+    if (pos.x === end.x && pos.y === end.y) {
+      return path;
+    }
+
+    const neighbors = [
+      { x: pos.x, y: pos.y - 1 },
+      { x: pos.x, y: pos.y + 1 },
+      { x: pos.x - 1, y: pos.y },
+      { x: pos.x + 1, y: pos.y },
+    ];
+
+    for (const n of neighbors) {
+      const key = `${n.x},${n.y}`;
+      if (!visited.has(key)) {
+        const t = getTerrainAt(n.x, n.y);
+        if (t !== TerrainType.WALL) {
+          visited.add(key);
+          queue.push({ pos: n, path: [...path, n] });
+        }
+      }
+    }
+  }
+  return null;
+};
+
+const calculateScore = (stats: PlayerStats, isVictory: boolean) => {
+  let score = 0;
+  score += isVictory ? SCORE_WEIGHTS.WIN_BONUS : SCORE_WEIGHTS.DEFEAT;
+  score += stats.scrapsCollected * SCORE_WEIGHTS.SCRAP;
+  score += stats.botsRecruited * SCORE_WEIGHTS.RECRUIT;
+  score += Math.floor(stats.damageDealt * SCORE_WEIGHTS.DAMAGE_DEALT);
+  score += Math.floor(stats.healingDone * SCORE_WEIGHTS.HEAL);
+  score += stats.modulesInstalled * SCORE_WEIGHTS.MODULE;
+  score += stats.questsCompleted * SCORE_WEIGHTS.QUEST_STEP;
+  score += stats.botsLost * SCORE_WEIGHTS.BOT_LOST;
+  score += stats.stepsTaken * SCORE_WEIGHTS.STEP;
+  return Math.max(0, score);
 };
 
 const App: React.FC = () => {
@@ -25,8 +78,13 @@ const App: React.FC = () => {
   const [enemy, setEnemy] = useState<Enemy | null>(null);
   const [logs, setLogs] = useState<CombatLog[]>([]);
   const [inputDisabled, setInputDisabled] = useState(false);
-  const [message, setMessage] = useState<string | null>(null); // For exploration toasts
+  const [message, setMessage] = useState<string | null>(null); 
   const [introShown, setIntroShown] = useState(false);
+  const [interactionLabel, setInteractionLabel] = useState<string | null>(null);
+  const [combatEffect, setCombatEffect] = useState<CombatEffect | null>(null);
+
+  const movementPathRef = useRef<Position[]>([]);
+  const movementTimerRef = useRef<number | null>(null);
 
   const addLog = (message: string, type: CombatLog['type']) => {
     setLogs(prev => [...prev, { message, type, id: Date.now() + Math.random() }]);
@@ -37,7 +95,14 @@ const App: React.FC = () => {
     setTimeout(() => setMessage(null), 3000);
   };
 
-  // --- Intro Modal ---
+  // Update Stats Helper
+  const updateStats = (updater: (stats: PlayerStats) => Partial<PlayerStats>) => {
+    setPlayer(prev => ({
+       ...prev,
+       stats: { ...prev.stats, ...updater(prev.stats) }
+    }));
+  };
+
   useEffect(() => {
     if (!introShown) {
       setTimeout(() => {
@@ -47,7 +112,6 @@ const App: React.FC = () => {
     }
   }, [introShown]);
 
-  // --- Helper Accessors ---
   const activeBot = player.team[player.activeSlot];
   
   const updateActiveBot = (updater: (bot: Bot) => Bot) => {
@@ -58,107 +122,172 @@ const App: React.FC = () => {
     });
   };
 
-  // --- Exploration Logic ---
-  
-  const handleMove = useCallback((dx: number, dy: number) => {
-    if (gameState !== GameState.EXPLORING) return;
+  // Interaction Check Loop
+  useEffect(() => {
+     if (gameState !== GameState.EXPLORING) {
+        setInteractionLabel(null);
+        return;
+     }
 
-    setPlayer(prev => {
-      const targetX = prev.pos.x + dx;
-      const targetY = prev.pos.y + dy;
-      
-      // Terrain Check
-      const terrain = getTerrainAt(targetX, targetY);
-      if (terrain === TerrainType.WALL) {
-        return { ...prev, facing: dx === 0 ? (dy > 0 ? 'DOWN' : 'UP') : (dx > 0 ? 'RIGHT' : 'LEFT') };
-      }
+     const { x, y } = player.pos;
+     const poi = getPOIAt(x, y);
+     
+     if (poi === POIType.POD) {
+        setInteractionLabel("ACCESS POD");
+        return;
+     }
+     
+     // Check Guardian
+     if (player.quest.stage === 'DEFEAT_GUARDIAN') {
+       const distG = Math.abs(x - GUARDIAN_POS.x) + Math.abs(y - GUARDIAN_POS.y);
+       if (distG <= 1) {
+         setInteractionLabel("FIGHT GUARDIAN");
+         return;
+       }
+     }
 
-      let nextTeam = [...prev.team];
-      let msg = message;
+     const neighbors = [
+       { x, y: y - 1 }, { x, y: y + 1 }, { x: x - 1, y }, { x: x + 1, y }
+     ];
+     
+     for(const n of neighbors) {
+        const nPoi = getPOIAt(n.x, n.y);
+        const key = `${n.x},${n.y}`;
+        if (player.visitedPOIs[key]) continue;
 
-      // Terrain Effects (Acid)
-      if (terrain === TerrainType.ACID_POOL) {
-        const active = nextTeam[prev.activeSlot];
-        if (active.hp > 0 && !active.isDefeated) {
-           active.hp = Math.max(0, active.hp - ACID_DAMAGE);
-           if (active.hp === 0) {
-             active.isDefeated = true;
-             // Auto switch logic handled via separate effect if needed, but simple here:
-             msg = "DANGER: Acid Damage! Unit Disabled.";
-           } else {
-             msg = "WARNING: Corrosive Environment Detected.";
-           }
+        if (nPoi === POIType.CACHE) {
+            setInteractionLabel("OPEN CACHE");
+            return;
         }
+        if (nPoi === POIType.NPC) {
+            setInteractionLabel("TALK");
+            return;
+        }
+        if (nPoi === POIType.DERELICT) {
+            setInteractionLabel("SALVAGE / REPAIR");
+            return;
+        }
+     }
+     setInteractionLabel(null);
+
+  }, [player.pos, player.visitedPOIs, gameState, player.quest.stage]);
+
+  const stopMovement = () => {
+     if (movementTimerRef.current) {
+        window.clearInterval(movementTimerRef.current);
+        movementTimerRef.current = null;
+     }
+     movementPathRef.current = [];
+  };
+
+  const executeMoveStep = useCallback((targetPos: Position) => {
+      setPlayer(prev => {
+          const dx = targetPos.x - prev.pos.x;
+          const dy = targetPos.y - prev.pos.y;
+          let facing = prev.facing;
+          if (dx > 0) facing = 'RIGHT';
+          else if (dx < 0) facing = 'LEFT';
+          else if (dy > 0) facing = 'DOWN';
+          else if (dy < 0) facing = 'UP';
+
+          const terrain = getTerrainAt(targetPos.x, targetPos.y);
+          if (terrain === TerrainType.WALL) {
+            stopMovement();
+            return { ...prev, facing };
+          }
+
+          let nextTeam = [...prev.team];
+          
+          if (terrain === TerrainType.ACID_POOL) {
+            const active = nextTeam[prev.activeSlot];
+            if (active.hp > 0 && !active.isDefeated) {
+               active.hp = Math.max(0, active.hp - ACID_DAMAGE);
+               if (active.hp === 0) {
+                 active.isDefeated = true;
+                 showMessage("DANGER: Acid Damage! Unit Disabled.");
+                 stopMovement(); 
+               } else {
+                 showMessage("WARNING: Corrosive Environment.");
+               }
+            }
+          }
+
+          const distToPod = Math.sqrt(Math.pow(targetPos.x - POD_POS.x, 2) + Math.pow(targetPos.y - POD_POS.y, 2));
+          const currentBot = nextTeam[prev.activeSlot];
+          const hasScanner = currentBot.modules.some(m => m.effectId === 'SCANNER');
+          const chance = distToPod < 5 ? 0 : hasScanner ? ENCOUNTER_CHANCE_BASE * 0.6 : ENCOUNTER_CHANCE_BASE;
+
+          if (currentBot.hp > 0 && Math.random() < chance) {
+            stopMovement();
+            const newEnemy = createEnemy(currentBot.level);
+            setEnemy(newEnemy);
+            setGameState(GameState.COMBAT);
+            setLogs([]); 
+            addLog(`ALERT: ${newEnemy.name} approaching!`, 'info');
+            return { ...prev, team: nextTeam, pos: targetPos, facing, stats: { ...prev.stats, stepsTaken: prev.stats.stepsTaken + 1 } };
+          }
+
+          return { ...prev, team: nextTeam, pos: targetPos, facing, stats: { ...prev.stats, stepsTaken: prev.stats.stepsTaken + 1 } };
+      });
+  }, []);
+
+  const handleNavigate = (targetX: number, targetY: number) => {
+      if (gameState !== GameState.EXPLORING) return;
+      const path = findPath(player.pos, { x: targetX, y: targetY });
+      if (path && path.length > 0) {
+          movementPathRef.current = path;
+          if (movementTimerRef.current) clearInterval(movementTimerRef.current);
+          movementTimerRef.current = window.setInterval(() => {
+              if (movementPathRef.current.length === 0) {
+                  stopMovement();
+                  return;
+              }
+              const nextPos = movementPathRef.current.shift()!;
+              executeMoveStep(nextPos);
+          }, 200); 
+      } else {
+          showMessage("Path blocked.");
       }
-      if (msg !== message && msg) showMessage(msg);
-
-      // Encounter Check (Safe near pod)
-      const distToPod = Math.sqrt(Math.pow(targetX - POD_POS.x, 2) + Math.pow(targetY - POD_POS.y, 2));
-      const currentBot = nextTeam[prev.activeSlot];
-      const hasScanner = currentBot.modules.some(m => m.effectId === 'SCANNER');
-      const chance = distToPod < 5 ? 0 : hasScanner ? ENCOUNTER_CHANCE_BASE * 0.6 : ENCOUNTER_CHANCE_BASE;
-
-      if (currentBot.hp > 0 && Math.random() < chance) {
-        const newEnemy = createEnemy(currentBot.level);
-        setEnemy(newEnemy);
-        setGameState(GameState.COMBAT);
-        setLogs([]); 
-        addLog(`ALERT: ${newEnemy.name} approaching!`, 'info');
-        return { ...prev, team: nextTeam, pos: { x: targetX, y: targetY } };
-      }
-
-      return { 
-        ...prev, 
-        team: nextTeam,
-        pos: { x: targetX, y: targetY },
-        facing: dx === 0 ? (dy > 0 ? 'DOWN' : 'UP') : (dx > 0 ? 'RIGHT' : 'LEFT') 
-      };
-    });
-  }, [gameState, message]);
+  };
 
   const handleInteract = () => {
     if (gameState !== GameState.EXPLORING) return;
+    stopMovement(); 
 
     const { x, y } = player.pos;
-    // Check current tile (for POD) or front tile
-    let targetX = x; 
-    let targetY = y;
     
-    let poiKey = `${x},${y}`;
-    let poi = getPOIAt(x, y);
-    
-    if (poi === POIType.NONE) {
-      if (player.facing === 'UP') targetY--;
-      if (player.facing === 'DOWN') targetY++;
-      if (player.facing === 'LEFT') targetX--;
-      if (player.facing === 'RIGHT') targetX++;
-      poiKey = `${targetX},${targetY}`;
-      poi = getPOIAt(targetX, targetY);
+    // --- BOSS INTERACTION ---
+    if (player.quest.stage === 'DEFEAT_GUARDIAN') {
+       if (Math.abs(x - GUARDIAN_POS.x) + Math.abs(y - GUARDIAN_POS.y) <= 1) {
+          setEnemy(BOSS_ENEMY);
+          setGameState(GameState.COMBAT);
+          setLogs([]);
+          addLog("WARNING: CORE GUARDIAN ENGAGED", 'danger');
+          return;
+       }
     }
 
-    // --- ESCAPE POD INTERACTION ---
-    if (poi === POIType.POD) {
+    // --- POD ---
+    if (x === POD_POS.x && y === POD_POS.y) {
        if (player.quest.stage === 'FIND_POD') {
           showMessage("Pod Systems Critical. Needs 3 Hyperdrive Flux parts.");
           setPlayer(p => ({ ...p, quest: { ...p.quest, stage: 'GATHER_PARTS' } }));
+          updateStats(s => ({ questsCompleted: s.questsCompleted + 1 }));
        } else if (player.quest.stage === 'GATHER_PARTS') {
           if (player.quest.partsFound >= player.quest.partsNeeded) {
-             showMessage("Parts Installed. GUARDIAN SIGNAL DETECTED. PREPARE FOR COMBAT.");
+             showMessage("Parts Installed. GUARDIAN SIGNAL DETECTED NEARBY.");
              setPlayer(p => ({ ...p, quest: { ...p.quest, stage: 'DEFEAT_GUARDIAN' } }));
-             setTimeout(() => {
-                setEnemy(BOSS_ENEMY);
-                setGameState(GameState.COMBAT);
-                setLogs([]);
-                addLog("WARNING: CORE GUARDIAN DETECTED", 'danger');
-             }, 2000);
+             updateStats(s => ({ questsCompleted: s.questsCompleted + 1 }));
           } else {
              showMessage(`Needs Hyperdrive Flux. Found: ${player.quest.partsFound}/${player.quest.partsNeeded}`);
           }
        } else if (player.quest.stage === 'DEFEAT_GUARDIAN') {
-          showMessage("The Guardian blocks the launch sequence!");
+          showMessage("The Guardian blocks the launch sequence! It is waiting outside.");
        } else if (player.quest.stage === 'REPAIR_POD') {
           if (player.quest.hasOmniTool) {
              setGameState(GameState.VICTORY);
+             setPlayer(p => ({ ...p, quest: { ...p.quest, stage: 'COMPLETED' } }));
+             updateStats(s => ({ questsCompleted: s.questsCompleted + 1 }));
           } else {
              showMessage("Need Omni-Tool to initiate launch.");
           }
@@ -166,50 +295,60 @@ const App: React.FC = () => {
        return;
     }
 
-    if (player.visitedPOIs[poiKey] || poi === POIType.NONE) {
+    let targetPOI = getPOIAt(x, y); 
+    let targetKey = `${x},${y}`;
+
+    if (targetPOI === POIType.NONE || player.visitedPOIs[targetKey]) {
+        const neighbors = [
+           { x, y: y - 1 }, { x, y: y + 1 }, { x: x - 1, y }, { x: x + 1, y }
+        ];
+        for(const n of neighbors) {
+            const p = getPOIAt(n.x, n.y);
+            const k = `${n.x},${n.y}`;
+            if (p !== POIType.NONE && !player.visitedPOIs[k]) {
+                targetPOI = p;
+                targetKey = k;
+                break;
+            }
+        }
+    }
+
+    if (player.visitedPOIs[targetKey] || targetPOI === POIType.NONE) {
        showMessage("Nothing to interact with.");
        return;
     }
 
-    // Handle Interaction
-    if (poi === POIType.CACHE) {
-      // Quest Part Chance: Increases further out
-      const dist = Math.sqrt(targetX*targetX + targetY*targetY);
+    if (targetPOI === POIType.CACHE) {
+      const dist = Math.sqrt(x*x + y*y); 
       const isQuestPart = player.quest.stage === 'GATHER_PARTS' && Math.random() < (dist / 50) && player.quest.partsFound < player.quest.partsNeeded;
       
       if (isQuestPart) {
           showMessage("Found Hyperdrive Flux!");
           setPlayer(prev => ({
              ...prev,
-             visitedPOIs: { ...prev.visitedPOIs, [poiKey]: true },
+             visitedPOIs: { ...prev.visitedPOIs, [targetKey]: true },
              quest: { ...prev.quest, partsFound: prev.quest.partsFound + 1 },
              inventory: [...prev.inventory, ITEMS_DB.QUEST_PART]
           }));
+          updateStats(s => ({ scrapsCollected: s.scrapsCollected + 10 })); // Bonus stats
       } else {
           const foundScrap = Math.floor(Math.random() * 50) + 20;
           setPlayer(prev => ({
             ...prev,
             scrap: prev.scrap + foundScrap,
-            visitedPOIs: { ...prev.visitedPOIs, [poiKey]: true }
+            visitedPOIs: { ...prev.visitedPOIs, [targetKey]: true }
           }));
           showMessage(`Cache opened: Found ${foundScrap} Scrap!`);
+          updateStats(s => ({ scrapsCollected: s.scrapsCollected + foundScrap }));
       }
     }
-    else if (poi === POIType.NPC) {
-       const msgs = [
-         "I saw a Hyperdrive part in a crate far to the east...",
-         "The Guardian only appears when the pod is active.",
-         "Need spare parts? Too bad.",
-         "My logic core hurts."
-       ];
-       const msg = msgs[Math.floor(Math.random() * msgs.length)];
+    else if (targetPOI === POIType.NPC) {
+       const msg = NPC_TUTORIALS[Math.floor(Math.random() * NPC_TUTORIALS.length)];
        showMessage(`NPC: "${msg}"`);
     }
-    else if (poi === POIType.DERELICT) {
-      // 50% chance to recruit for cost, 50% scrap
+    else if (targetPOI === POIType.DERELICT) {
       const recruitCost = 50;
       if (player.scrap >= recruitCost) {
-         // Generate Unique Bot
          const classes = ['ASSAULT', 'TANK', 'TECH'];
          const rndClass = classes[Math.floor(Math.random() * classes.length)];
          const template = BOT_CLASSES[rndClass as keyof typeof BOT_CLASSES];
@@ -232,7 +371,6 @@ const App: React.FC = () => {
              personality
          };
 
-         // Add to team or reserves
          setPlayer(prev => {
              const fullTeam = prev.team.length >= 3;
              return {
@@ -240,20 +378,19 @@ const App: React.FC = () => {
                  scrap: prev.scrap - recruitCost,
                  team: fullTeam ? prev.team : [...prev.team, newBot],
                  reserves: fullTeam ? [...prev.reserves, newBot] : prev.reserves,
-                 visitedPOIs: { ...prev.visitedPOIs, [poiKey]: true }
+                 visitedPOIs: { ...prev.visitedPOIs, [targetKey]: true }
              };
          });
-         showMessage(player.team.length >= 3 
-            ? `Recruited ${name}. Sent to Base Camp.` 
-            : `Recruited ${name}. Joined squad!`);
-
+         showMessage(`Recruited ${name}.`);
+         updateStats(s => ({ botsRecruited: s.botsRecruited + 1 }));
       } else {
           showMessage(`Need ${recruitCost} Scrap to repair. Salvaged parts instead.`);
            setPlayer(prev => ({
              ...prev,
              scrap: prev.scrap + 15,
-             visitedPOIs: { ...prev.visitedPOIs, [poiKey]: true }
+             visitedPOIs: { ...prev.visitedPOIs, [targetKey]: true }
            }));
+           updateStats(s => ({ scrapsCollected: s.scrapsCollected + 15 }));
       }
     }
   };
@@ -265,26 +402,22 @@ const App: React.FC = () => {
   };
 
   const handleSwapReserve = (teamIdx: number, reserveIdx: number) => {
-     // -1 indicates "from/to" the other list
      setPlayer(prev => {
         const newTeam = [...prev.team];
         const newReserves = [...prev.reserves];
 
         if (teamIdx !== -1 && reserveIdx === -1) {
-           // Team -> Reserve
            if (newTeam.length <= 1) {
               showMessage("Cannot send last bot to reserves!");
               return prev;
            }
            const [bot] = newTeam.splice(teamIdx, 1);
            newReserves.push(bot);
-           // Fix active slot if needed
            let newActive = prev.activeSlot;
            if (newActive >= newTeam.length) newActive = 0;
            return { ...prev, team: newTeam, reserves: newReserves, activeSlot: newActive };
         } 
         else if (teamIdx === -1 && reserveIdx !== -1) {
-           // Reserve -> Team
            if (newTeam.length >= 3) {
               showMessage("Squad full (Max 3).");
               return prev;
@@ -301,7 +434,6 @@ const App: React.FC = () => {
      setPlayer(prev => {
        const newTeam = [...prev.team];
        const bot = newTeam[prev.activeSlot];
-       
        if (isEquipping) {
           if (bot.activeSkills.length >= 3) return prev;
           bot.storedSkills = bot.storedSkills.filter(id => id !== skillId);
@@ -319,14 +451,17 @@ const App: React.FC = () => {
       const newInventory = prev.inventory.map(i => i.id === item.id ? { ...i, count: i.count - 1 } : i).filter(i => i.count > 0);
       const newTeam = [...prev.team];
       const bot = newTeam[botIndex];
+      let healed = 0;
 
       if (item.effect === 'HEAL') {
-        if (bot.isDefeated) return prev; // Use revive
+        if (bot.isDefeated) return prev; 
+        healed = Math.min(50, bot.maxHp - bot.hp);
         bot.hp = Math.min(bot.maxHp, bot.hp + item.value);
       } else if (item.effect === 'REVIVE') {
         if (!bot.isDefeated) return prev;
         bot.isDefeated = false;
         bot.hp = Math.floor(bot.maxHp * item.value);
+        healed = bot.hp;
       } else if (item.effect === 'XP') {
         bot.xp += item.value;
         if (bot.xp >= bot.maxXp) {
@@ -338,7 +473,12 @@ const App: React.FC = () => {
         }
       }
 
-      return { ...prev, inventory: newInventory, team: newTeam };
+      return { 
+          ...prev, 
+          inventory: newInventory, 
+          team: newTeam,
+          stats: { ...prev.stats, healingDone: prev.stats.healingDone + healed }
+      };
     });
   };
 
@@ -357,6 +497,7 @@ const App: React.FC = () => {
         };
       });
       setPlayer(p => ({ ...p, scrap: p.scrap - module.cost }));
+      updateStats(s => ({ modulesInstalled: s.modulesInstalled + 1 }));
     }
   };
 
@@ -365,16 +506,13 @@ const App: React.FC = () => {
     if (player.scrap >= cost && activeBot.hp < activeBot.maxHp) {
       updateActiveBot(bot => ({ ...bot, hp: Math.min(bot.maxHp, bot.hp + 20) }));
       setPlayer(p => ({ ...p, scrap: p.scrap - cost }));
+      updateStats(s => ({ healingDone: s.healingDone + 20 }));
     }
   };
-
-  // --- Combat Logic ---
 
   const combatRound = async (action: string) => {
     if (inputDisabled || !enemy) return;
     setInputDisabled(true);
-
-    let endTurn = true;
 
     // Handle Switch Action
     if (action.startsWith('SWITCH:')) {
@@ -383,7 +521,6 @@ const App: React.FC = () => {
       setPlayer(p => ({ ...p, activeSlot: targetIdx }));
     } 
     else if (action.startsWith('ITEM:')) {
-      // Use Item in Combat
       const itemId = action.split(':')[1];
       const item = player.inventory.find(i => i.id === itemId);
       if (item) {
@@ -392,24 +529,28 @@ const App: React.FC = () => {
       }
     }
     else {
-      // --- Player Skill Execution ---
       let dmg = 0;
       const currentBot = player.team[player.activeSlot];
       const dmgMod = currentBot.modules.find(m => m.effectId === 'DMG_BOOST')?.value || 0;
-      
-      // Check generic or unique skills
       const skill = SKILLS_DB[action];
       
       if (skill) {
-        // General Skill Logic
+        // Trigger Animation
+        setCombatEffect({ type: skill.animation, startTime: performance.now(), duration: 600, source: 'PLAYER' });
+
+        // Update Stats
+        updateStats(s => ({
+            skillsUsed: { ...s.skillsUsed, [skill.name]: (s.skillsUsed[skill.name] || 0) + 1 },
+            mostUsedBotId: currentBot.id // Approximate tracking
+        }));
+
         if (skill.type === 'ATTACK' || skill.type === 'TECH') {
-           // Base calc
            let base = 12;
            if (skill.id === 'LASER_SHOT') base = 15;
            if (skill.id === 'BURST_FIRE') base = 10 + Math.random()*10;
            if (skill.id === 'GRENADE') base = 40;
            if (skill.id === 'BASH') base = 20;
-           if (skill.id === 'ZAP') base = 15; // Ignores def? (Not implemented yet)
+           if (skill.id === 'ZAP') base = 15; 
            if (skill.id === 'HACK') {
                if (Math.random() > 0.4) {
                  base = 30;
@@ -421,13 +562,22 @@ const App: React.FC = () => {
            }
 
            dmg = Math.floor(base + (currentBot.level * 3) + dmgMod);
+
+           // Type Matchups
+           const typeMod = DAMAGE_TYPE_CHART[skill.damageType || 'NONE'][enemy.class];
+           dmg = Math.floor(dmg * typeMod);
+
            if (skill.id === 'TARGET_LOCK') {
               addLog("Target Locked! (Crit chance up)", 'player');
-              // Simplified: Just does 0 damage but could set a flag. For now, assume it's a support move.
               dmg = 0;
            }
 
-           if (dmg > 0) addLog(`${currentBot.name} used ${skill.name} for ${dmg} dmg!`, 'player');
+           if (dmg > 0) {
+               addLog(`${currentBot.name} used ${skill.name} for ${dmg} dmg!`, 'player');
+               if (typeMod > 1) addLog("It's super effective!", 'gain');
+               if (typeMod < 1) addLog("It's not very effective...", 'danger');
+               updateStats(s => ({ damageDealt: s.damageDealt + dmg }));
+           }
         }
         else if (skill.type === 'DEFENSE') {
            if (skill.id === 'REINFORCE' || skill.id === 'SHIELD_MOD') {
@@ -440,30 +590,36 @@ const App: React.FC = () => {
            if (skill.id === 'QUICK_FIX') {
              updateActiveBot(b => ({ ...b, hp: Math.min(b.maxHp, b.hp + 30) }));
              addLog("Emergency repairs complete (+30 HP).", 'gain');
+             updateStats(s => ({ healingDone: s.healingDone + 30 }));
            }
         }
       }
       else if (action === 'SHIELD_MOD') {
+         setCombatEffect({ type: 'SHIELD', startTime: performance.now(), duration: 500, source: 'PLAYER' });
          const shieldVal = currentBot.modules.find(m => m.effectId === 'SHIELD')?.value || 20;
          updateActiveBot(b => ({ ...b, tempShield: (b.tempShield || 0) + shieldVal }));
          addLog(`Shields up (+${shieldVal}).`, 'gain');
       }
       else if (action === 'RECRUIT') {
+         setCombatEffect({ type: 'ELECTRIC', startTime: performance.now(), duration: 800, source: 'PLAYER' });
          const chance = Math.max(0, Math.min(0.9, (1 - (enemy.hp / enemy.maxHp)) * 1.5));
          if (Math.random() < chance && !enemy.isBoss) {
             addLog("HACK SUCCESSFUL! Enemy rebooted.", 'gain');
             
+            let recruitClass: Bot['class'] = enemy.class;
+            const template = BOT_CLASSES[recruitClass];
+
             const newBot: Bot = {
                id: `bot_${Date.now()}`,
                name: `${enemy.name.split(' ')[0]} Unit`,
-               class: 'TECH',
+               class: recruitClass,
                hp: Math.floor(enemy.maxHp * 0.5),
                maxHp: enemy.maxHp,
                level: currentBot.level,
                xp: 0,
                maxXp: 100 * currentBot.level,
                modules: [],
-               activeSkills: ['ZAP', 'HACK'],
+               activeSkills: [...template.startingSkills],
                storedSkills: [],
                isDefeated: false,
                personality: "Reformatted. Awaiting orders."
@@ -479,6 +635,7 @@ const App: React.FC = () => {
                   };
                });
                addLog(player.team.length >= 3 ? "Sent to Base Camp." : "Joined Squad!", 'gain');
+               updateStats(s => ({ botsRecruited: s.botsRecruited + 1 }));
                setEnemy(null);
                setGameState(GameState.EXPLORING);
                setInputDisabled(false);
@@ -494,31 +651,11 @@ const App: React.FC = () => {
       }
     }
 
-    // Check Victory
-    if (enemy.hp - (enemy.hp - (enemy ? enemy.hp : 0)) <= 0) { // Simplified check logic
-       // Wait, previous logic modified enemy state but we can't read state immediately inside closure.
-       // So we rely on the fact that `setEnemy` will trigger re-render, but we need to handle flow here.
-    }
-
-    // We need to wait for state update to check HP realistically, 
-    // OR check against the calculated values.
-    // Since react state is async, we'll assume flow continues to enemy turn unless enemy is dead.
-    // Let's assume enemy is NOT dead yet for the animation delay, then check.
-    
-    // Re-check enemy HP based on calculation
-    // Since we don't have the new state, we can't perfectly check death here.
-    // Instead, we will check death in a useEffect or inside the setEnemy callback, 
-    // but to keep single-file simplicity, let's hack the flow:
-    
-    // (Wait for UI to update player move)
     await new Promise(r => setTimeout(r, 800));
 
-    // Check if enemy died from that specific move (we can't read new state yet, so we check prev enemy - dmg)
-    // This is slightly buggy in React strict mode without refs, but works for simple games.
     setEnemy(prevEnemy => {
        if (!prevEnemy) return null;
        if (prevEnemy.hp <= 0) {
-         // VICTORY LOGIC
         if (prevEnemy.isBoss) {
              addLog("GUARDIAN DEFEATED! OMNI-TOOL ACQUIRED.", 'gain');
              setTimeout(() => {
@@ -536,8 +673,8 @@ const App: React.FC = () => {
 
         setTimeout(() => {
           addLog(`Victory! +${scrapGain} Scrap, +${xpGain} XP.`, 'gain');
+          updateStats(s => ({ scrapsCollected: s.scrapsCollected + scrapGain }));
           
-          // Loot
           if (Math.random() > 0.7) {
             const drops = Object.values(ITEMS_DB).filter(i => i.effect !== 'QUEST');
             const drop = drops[Math.floor(Math.random() * drops.length)];
@@ -562,11 +699,9 @@ const App: React.FC = () => {
                   bot.xp -= bot.maxXp;
                   bot.maxXp = Math.floor(bot.maxXp * 1.5);
                   bot.maxHp += 15;
-                  bot.hp = bot.maxHp; // Full heal on level up
+                  bot.hp = bot.maxHp;
                   addLog("LEVEL UP! Fully Repaired.", 'gain');
                   
-                  // Unlock new skill slot logic or auto-learn?
-                  // For now, we auto-learn class skills based on level in a separate effect or check
                   const newSkill = Object.values(SKILLS_DB).find(s => s.minLevel === bot.level);
                   if (newSkill && !bot.activeSkills.includes(newSkill.id) && !bot.storedSkills.includes(newSkill.id)) {
                      if (bot.activeSkills.length < 3) bot.activeSkills.push(newSkill.id);
@@ -575,7 +710,11 @@ const App: React.FC = () => {
                   }
                }
                
-               if (autoRepair > 0) bot.hp = Math.min(bot.maxHp, bot.hp + autoRepair);
+               if (autoRepair > 0) {
+                   const healed = Math.min(bot.maxHp - bot.hp, autoRepair);
+                   bot.hp += healed;
+                   updateStats(s => ({ healingDone: s.healingDone + healed }));
+               }
                bot.tempShield = 0;
 
                return { ...p, scrap: p.scrap + scrapGain, team: newTeam };
@@ -590,16 +729,12 @@ const App: React.FC = () => {
        return prevEnemy;
     });
     
-    // If enemy survived, they attack
-    // We need to check if enemy is null (defeated) to stop execution.
-    // Since we can't synchronously know if setEnemy(null) happened, we check logic again.
-    // This is a bit messy in functional updates. Ideally we use a Ref for enemy HP.
-    // Instead, we'll just run the enemy attack in a separate timeout that checks existance.
-    
     setTimeout(() => {
        setEnemy(currentEnemy => {
-          if (!currentEnemy || currentEnemy.hp <= 0) return currentEnemy; // Dead
+          if (!currentEnemy || currentEnemy.hp <= 0) return currentEnemy;
 
+          // Enemy Attack Logic
+          setCombatEffect({ type: 'LASER', startTime: performance.now(), duration: 500, source: 'ENEMY' });
           const enemyDmg = Math.floor(8 + (player.team[player.activeSlot].level * 1.5));
           addLog(`${currentEnemy.name} attacks for ${enemyDmg} dmg.`, 'enemy');
 
@@ -622,13 +757,14 @@ const App: React.FC = () => {
 
             bot.tempShield = currentShield;
             bot.hp -= taken;
+            updateStats(s => ({ damageTaken: s.damageTaken + taken }));
 
             if (bot.hp <= 0) {
               bot.hp = 0;
               bot.isDefeated = true;
+              updateStats(s => ({ botsLost: s.botsLost + 1 }));
               addLog(`${bot.name} has been defeated!`, 'enemy');
               
-              // AUTO SWITCH LOGIC
               const nextAlive = newTeam.findIndex(b => !b.isDefeated);
               if (nextAlive !== -1) {
                  addLog(`WARNING: Unit Down. Switching to ${newTeam[nextAlive].name}...`, 'danger');
@@ -647,47 +783,44 @@ const App: React.FC = () => {
     }, 1000);
   };
 
-  // --- Keyboard Listeners ---
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (inputDisabled) return;
-      
-      switch (e.key) {
-        case 'ArrowUp':
-        case 'w': handleMove(0, -1); break;
-        case 'ArrowDown':
-        case 's': handleMove(0, 1); break;
-        case 'ArrowLeft':
-        case 'a': handleMove(-1, 0); break;
-        case 'ArrowRight':
-        case 'd': handleMove(1, 0); break;
-        case 'e': case 'Enter': handleInteract(); break;
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleMove, inputDisabled, player]);
+  const finalScore = calculateScore(player.stats, gameState === GameState.VICTORY);
 
   return (
-    <div className="w-screen h-screen bg-black flex items-center justify-center overflow-hidden font-vt323">
-      <div className="w-full max-w-6xl h-full md:h-[90vh] flex flex-col md:flex-row gap-4 p-4">
+    <div className="fixed inset-0 bg-black flex flex-col items-center justify-center overflow-hidden font-vt323">
+      <div className="w-full max-w-6xl h-full flex flex-col md:flex-row md:h-[90vh] gap-4 p-4">
         
         {/* Left: Game View */}
-        <div className="flex-[2] flex flex-col justify-center relative min-h-0">
+        <div className="w-full md:flex-[2] md:w-auto flex flex-col justify-center relative min-h-0 shrink-0 aspect-[4/3] md:aspect-auto">
           {gameState === GameState.VICTORY ? (
-             <div className="w-full h-full flex flex-col items-center justify-center bg-blue-950 border-4 border-blue-500 rounded-lg p-8 text-center">
+             <div className="w-full h-full flex flex-col items-center justify-center bg-blue-950 border-4 border-blue-500 rounded-lg p-8 text-center overflow-y-auto custom-scrollbar">
                 <h1 className="text-6xl text-blue-300 font-bold mb-4">MISSION COMPLETE</h1>
-                <p className="text-2xl text-white mb-8">The Escape Pod has launched successfully.</p>
-                <p className="text-xl text-slate-400">You and your squad of {player.team.length + player.reserves.length} bots escaped the scrapyard.</p>
+                <div className="text-2xl text-white mb-8">SCORE: {finalScore}</div>
+                
+                <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-left text-slate-300 text-sm mb-8 font-mono">
+                    <div>Scrap Collected:</div><div className="text-right">{player.stats.scrapsCollected}</div>
+                    <div>Bots Recruited:</div><div className="text-right">{player.stats.botsRecruited}</div>
+                    <div>Damage Dealt:</div><div className="text-right">{player.stats.damageDealt}</div>
+                    <div>Healing Done:</div><div className="text-right">{player.stats.healingDone}</div>
+                    <div>Quests Completed:</div><div className="text-right">{player.stats.questsCompleted}</div>
+                    <div>Units Lost:</div><div className="text-right text-red-400">{player.stats.botsLost}</div>
+                </div>
+
                 <button 
                   onClick={() => window.location.reload()}
-                  className="mt-8 px-8 py-4 bg-blue-800 border-2 border-blue-500 text-white text-xl hover:bg-blue-600"
+                  className="mt-4 px-8 py-4 bg-blue-800 border-2 border-blue-500 text-white text-xl hover:bg-blue-600"
                 >
                   PLAY AGAIN
                 </button>
              </div>
           ) : (
-             <GameView gameState={gameState} player={player} enemy={enemy} />
+             <GameView 
+                gameState={gameState} 
+                player={player} 
+                enemy={enemy} 
+                combatEffect={combatEffect}
+                onNavigate={handleNavigate} 
+                onInteract={handleInteract}
+             />
           )}
           
           {message && (
@@ -698,18 +831,18 @@ const App: React.FC = () => {
         </div>
 
         {/* Right: UI Panel */}
-        <div className="flex-1 min-w-0 md:min-w-[300px] h-[45vh] md:h-full relative">
+        <div className="w-full md:flex-1 md:w-auto min-h-0 flex-1 relative overflow-hidden">
           {gameState === GameState.EXPLORING && (
             <ExplorationInterface 
               player={player} 
               onHeal={handleHeal}
               onBuyModule={handleBuyModule}
-              onMove={handleMove}
-              onInteract={handleInteract}
               onSwitchBot={handleSwitchBot}
               onUseItem={handleUseItem}
               onSwapReserve={handleSwapReserve}
               onEquipSkill={handleEquipSkill}
+              onInteract={handleInteract}
+              interactionLabel={interactionLabel}
             />
           )}
 
@@ -726,11 +859,17 @@ const App: React.FC = () => {
       </div>
 
       {gameState === GameState.GAME_OVER && (
-        <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center text-center z-50">
+        <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center text-center z-50 p-8 overflow-y-auto">
           <h1 className="text-8xl text-red-600 font-bold mb-4 tracking-widest font-mono">CRITICAL FAILURE</h1>
-          <div className="text-slate-400 text-xl mb-8 font-mono">
-             ALL UNITS OFFLINE.
+          <div className="text-white text-3xl mb-8 font-mono">FINAL SCORE: {finalScore}</div>
+          
+          <div className="grid grid-cols-2 gap-x-12 gap-y-4 text-left text-slate-400 text-lg mb-8 font-mono max-w-lg w-full">
+                <div>Bots Lost:</div><div className="text-right text-red-500">{player.stats.botsLost}</div>
+                <div>Steps Taken:</div><div className="text-right">{player.stats.stepsTaken}</div>
+                <div>Damage Taken:</div><div className="text-right">{player.stats.damageTaken}</div>
+                <div>Scrap Found:</div><div className="text-right">{player.stats.scrapsCollected}</div>
           </div>
+
           <button 
             onClick={() => window.location.reload()}
             className="px-8 py-4 bg-red-800 border-2 border-red-500 text-white text-xl hover:bg-red-600 font-bold tracking-widest transition-all hover:scale-105 font-mono"

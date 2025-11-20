@@ -1,13 +1,31 @@
-
-import { Module, TerrainType, POIType, Bot, Item, Enemy, Skill } from './types';
+import { Module, TerrainType, POIType, Bot, Item, Enemy, Skill, Player, DamageType } from './types';
 
 export const TILE_SIZE = 48;
 export const VIEW_WIDTH = 15; 
 export const VIEW_HEIGHT = 11;
 
-export const POD_POS = { x: 0, y: 0 };
+// Randomize Pod Position between -100 and 100
+export const POD_POS = { 
+  x: Math.floor(Math.random() * 201) - 100, 
+  y: Math.floor(Math.random() * 201) - 100 
+};
+
+export const GUARDIAN_POS = { x: POD_POS.x + 2, y: POD_POS.y };
 
 export const ACID_DAMAGE = 10;
+
+export const SCORE_WEIGHTS = {
+  WIN_BONUS: 5000,
+  SCRAP: 10,
+  RECRUIT: 200,
+  DAMAGE_DEALT: 1,
+  HEAL: 2,
+  MODULE: 150,
+  QUEST_STEP: 500,
+  BOT_LOST: -500,
+  STEP: -1,
+  DEFEAT: -1000
+};
 
 export const COLORS = {
   gridLines: '#1e293b',
@@ -31,30 +49,43 @@ export const COLORS = {
 
 export const ENCOUNTER_CHANCE_BASE = 0.08; 
 
+// Type Matchups: [Attacker Type][Defender Class] = Multiplier
+// Kinetic > Assault, Thermal > Tech, Electric > Tank
+export const DAMAGE_TYPE_CHART: Record<DamageType, Record<string, number>> = {
+  KINETIC: { SCOUT: 1.0, ASSAULT: 1.5, TANK: 0.5, TECH: 1.0 },
+  THERMAL: { SCOUT: 1.0, ASSAULT: 0.5, TANK: 1.0, TECH: 1.5 },
+  ELECTRIC: { SCOUT: 1.0, ASSAULT: 1.0, TANK: 1.5, TECH: 0.5 },
+  NONE: { SCOUT: 1, ASSAULT: 1, TANK: 1, TECH: 1 }
+};
+
 // Skill Database
 export const SKILLS_DB: Record<string, Skill> = {
-  // Scout Skills
-  LASER_SHOT: { id: 'LASER_SHOT', name: 'Laser Shot', description: 'Fast, reliable thermal damage.', type: 'ATTACK', minLevel: 1 },
-  TARGET_LOCK: { id: 'TARGET_LOCK', name: 'Target Lock', description: 'Next attack deals double damage.', type: 'SUPPORT', minLevel: 3 },
-  QUICK_DASH: { id: 'QUICK_DASH', name: 'Quick Dash', description: 'Avoid next attack + Small Dmg.', type: 'DEFENSE', minLevel: 5 },
-  
-  // Assault Skills
-  BURST_FIRE: { id: 'BURST_FIRE', name: 'Burst Fire', description: 'Fire 3 shots. Low accuracy.', type: 'ATTACK', minLevel: 1 },
-  GRENADE: { id: 'GRENADE', name: 'Plasma Grenade', description: 'High damage explosive.', type: 'ATTACK', minLevel: 3 },
-  OVERCLOCK: { id: 'OVERCLOCK', name: 'Overclock', description: 'Take 10 dmg, gain massive Attack.', type: 'SUPPORT', minLevel: 5 },
+  // Scout Skills (Balanced / Utility)
+  LASER_SHOT: { id: 'LASER_SHOT', name: 'Laser Shot', description: 'Thermal damage. Good vs Tech.', type: 'ATTACK', damageType: 'THERMAL', animation: 'LASER', minLevel: 1 },
+  TARGET_LOCK: { id: 'TARGET_LOCK', name: 'Target Lock', description: 'Next attack deals double damage.', type: 'SUPPORT', animation: 'SHIELD', minLevel: 3 },
+  QUICK_DASH: { id: 'QUICK_DASH', name: 'Quick Dash', description: 'Avoid next attack + Small Kinetic Dmg.', type: 'DEFENSE', damageType: 'KINETIC', animation: 'MELEE', minLevel: 5 },
+  SNIPE: { id: 'SNIPE', name: 'Precision Bolt', description: 'High Kinetic damage, low accuracy.', type: 'ATTACK', damageType: 'KINETIC', animation: 'RAILGUN', minLevel: 6 },
 
-  // Tank Skills
-  BASH: { id: 'BASH', name: 'Piston Bash', description: 'Melee hit. Stuns weak foes.', type: 'ATTACK', minLevel: 1 },
-  REINFORCE: { id: 'REINFORCE', name: 'Reinforce', description: 'Gain 40 Temp Shield.', type: 'DEFENSE', minLevel: 3 },
-  TAUNT: { id: 'TAUNT', name: 'Aggro Shout', description: 'Enemy deals less dmg next turn.', type: 'DEFENSE', minLevel: 5 },
+  // Assault Skills (Kinetic / Aggro)
+  BURST_FIRE: { id: 'BURST_FIRE', name: 'Burst Fire', description: 'Kinetic. Good vs Assault.', type: 'ATTACK', damageType: 'KINETIC', animation: 'RAILGUN', minLevel: 1 },
+  GRENADE: { id: 'GRENADE', name: 'Plasma Grenade', description: 'Thermal Area Damage.', type: 'ATTACK', damageType: 'THERMAL', animation: 'EXPLOSION', minLevel: 3 },
+  OVERCLOCK: { id: 'OVERCLOCK', name: 'Overclock', description: 'Take 10 dmg, gain massive Attack.', type: 'SUPPORT', animation: 'ELECTRIC', minLevel: 5 },
+  FLAMETHROWER: { id: 'FLAMETHROWER', name: 'Flamethrower', description: 'Massive Thermal damage.', type: 'ATTACK', damageType: 'THERMAL', animation: 'EXPLOSION', minLevel: 7 },
 
-  // Tech Skills
-  ZAP: { id: 'ZAP', name: 'Arc Zap', description: 'Bypasses shields/armor.', type: 'TECH', minLevel: 1 },
-  QUICK_FIX: { id: 'QUICK_FIX', name: 'Quick Fix', description: 'Restore 30 HP.', type: 'SUPPORT', minLevel: 3 },
-  VIRUS: { id: 'VIRUS', name: 'System Virus', description: 'Massive Dmg over 3 turns.', type: 'TECH', minLevel: 5 },
+  // Tank Skills (Physical / Defense)
+  BASH: { id: 'BASH', name: 'Piston Bash', description: 'Melee Kinetic. Good vs Assault.', type: 'ATTACK', damageType: 'KINETIC', animation: 'MELEE', minLevel: 1 },
+  REINFORCE: { id: 'REINFORCE', name: 'Reinforce', description: 'Gain 40 Temp Shield.', type: 'DEFENSE', animation: 'SHIELD', minLevel: 3 },
+  TAUNT: { id: 'TAUNT', name: 'Aggro Shout', description: 'Enemy deals less dmg next turn.', type: 'DEFENSE', animation: 'SHIELD', minLevel: 5 },
+  EARTHQUAKE: { id: 'EARTHQUAKE', name: 'Ground Slam', description: 'Heavy Kinetic Dmg.', type: 'ATTACK', damageType: 'KINETIC', animation: 'EXPLOSION', minLevel: 7 },
+
+  // Tech Skills (Electric / Hacking)
+  ZAP: { id: 'ZAP', name: 'Arc Zap', description: 'Electric. Good vs Tanks.', type: 'TECH', damageType: 'ELECTRIC', animation: 'ELECTRIC', minLevel: 1 },
+  QUICK_FIX: { id: 'QUICK_FIX', name: 'Quick Fix', description: 'Restore 30 HP.', type: 'SUPPORT', animation: 'REPAIR', minLevel: 3 },
+  VIRUS: { id: 'VIRUS', name: 'System Virus', description: 'Massive Dmg over 3 turns.', type: 'TECH', damageType: 'ELECTRIC', animation: 'ELECTRIC', minLevel: 5 },
+  EMP: { id: 'EMP', name: 'EMP Blast', description: 'Huge Electric damage.', type: 'TECH', damageType: 'ELECTRIC', animation: 'ELECTRIC', minLevel: 7 },
   
   // Universal / Special
-  HACK: { id: 'HACK', name: 'System Hack', description: 'Risky. High Dmg or Fail.', type: 'TECH', minLevel: 1 },
+  HACK: { id: 'HACK', name: 'System Hack', description: 'Risky. Electric Dmg or Fail.', type: 'TECH', damageType: 'ELECTRIC', animation: 'ELECTRIC', minLevel: 1 },
 };
 
 export const BOT_CLASSES = {
@@ -69,17 +100,26 @@ export const UNIQUE_NAMES = [
 ];
 
 export const PERSONALITIES = [
-  "Cheerful beep.", "Grumpy hum.", "Stoic silence.", "Manic clicking.", "Philosophical whir."
+  "Cheerful beep.", "Grumpy hum.", "Stoic silence.", "Manic clicking.", "Philosophical whir.", "Calculating..."
 ];
 
-export const INITIAL_PLAYER_STATE = {
-  pos: { x: 2, y: 2 }, // Start slightly away from pod
-  facing: 'DOWN' as const,
+export const NPC_TUTORIALS = [
+  "I heard Tank bots are heavily armored, but a good electrical shock fries their circuits!",
+  "Assault units have kinetic shielding. Try melting them with Thermal weapons!",
+  "Tech bots are shielded against electricity, but they can't handle Thermal heat.",
+  "Scout bots are fast, but fragile. Anything hits them hard.",
+  "The Core Guardian only appears if you have the parts to summon it...",
+  "Camp at the Pod allows you to swap damaged bots for fresh ones."
+];
+
+export const INITIAL_PLAYER_STATE: Player = {
+  pos: { x: 0, y: 0 }, 
+  facing: 'DOWN',
   scrap: 0,
   activeSlot: 0,
   inventory: [
     { id: 'repair_kit', name: 'Repair Kit', description: 'Heals 50 HP', effect: 'HEAL', value: 50, count: 2 }
-  ] as Item[],
+  ],
   visitedPOIs: {},
   team: [
     {
@@ -97,20 +137,32 @@ export const INITIAL_PLAYER_STATE = {
       isDefeated: false,
       personality: "Ready for duty."
     }
-  ] as Bot[],
+  ],
   reserves: [],
   quest: {
     stage: 'FIND_POD',
     partsFound: 0,
     partsNeeded: 3,
     hasOmniTool: false
+  },
+  stats: {
+    stepsTaken: 0,
+    damageDealt: 0,
+    damageTaken: 0,
+    healingDone: 0,
+    scrapsCollected: 0,
+    botsRecruited: 0,
+    botsLost: 0,
+    skillsUsed: {},
+    mostUsedBotId: 'starter_bot',
+    questsCompleted: 0,
+    modulesInstalled: 0
   }
 };
 
-// Deterministic pseudo-random terrain generation
 export const getTerrainAt = (x: number, y: number): TerrainType => {
-  // Safe zone around Pod
   if (Math.abs(x) <= 2 && Math.abs(y) <= 2) return TerrainType.FLOOR;
+  if (Math.abs(x - POD_POS.x) <= 4 && Math.abs(y - POD_POS.y) <= 4) return TerrainType.FLOOR;
 
   const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
   const hash = n - Math.floor(n);
@@ -129,8 +181,8 @@ export const getPOIAt = (x: number, y: number): POIType => {
   const terrain = getTerrainAt(x, y);
   if (terrain !== TerrainType.FLOOR) return POIType.NONE;
   if (Math.abs(x) < 5 && Math.abs(y) < 5) return POIType.NONE; // Keep spawn clear
+  if (Math.abs(x - POD_POS.x) < 2 && Math.abs(y - POD_POS.y) < 2) return POIType.NONE; // Keep Immediate Pod area clear
 
-  // Different seed for POIs
   const n = Math.cos(x * 43.234 + y * 12.123) * 91238.123;
   const hash = n - Math.floor(n);
 
@@ -183,9 +235,10 @@ export const AVAILABLE_MODULES: Module[] = [
 export const BOSS_ENEMY: Enemy = {
   type: 'CORE_GUARDIAN',
   name: 'THE WARDEN',
-  hp: 500,
-  maxHp: 500,
-  xpValue: 1000,
+  hp: 800,
+  maxHp: 800,
+  xpValue: 2000,
+  class: 'ASSAULT', // Weak to Kinetic
   isBoss: true
 };
 

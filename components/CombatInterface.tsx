@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Player, Enemy } from '../types';
 import { SKILLS_DB } from '../constants';
@@ -35,13 +36,13 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({ player, enemy, onActi
   return (
     <div className="h-full flex flex-col bg-slate-900 border-l-4 border-red-900/30 p-4 font-mono overflow-hidden">
       
-      <div className="mb-4 border-b-2 border-red-900/50 pb-2 flex justify-between items-center">
+      <div className="mb-4 border-b-2 border-red-900/50 pb-2 flex justify-between items-center shrink-0">
         <h1 className="text-xl font-bold text-red-500 tracking-widest">COMBAT MODE</h1>
         <span className="text-xs text-red-400">TURN: PLAYER</span>
       </div>
 
       {/* Enemy Stats */}
-      <div className="bg-red-950/20 border border-red-900/50 p-3 rounded mb-4 relative">
+      <div className="bg-red-950/20 border border-red-900/50 p-3 rounded mb-4 relative shrink-0">
         <div className="flex justify-between items-baseline mb-1">
           <h3 className={`text-lg font-bold uppercase ${enemy.isBoss ? 'text-orange-500 animate-pulse' : 'text-red-400'}`}>{enemy.name}</h3>
           <span className="text-xs text-red-300/50">{enemy.isBoss ? 'GUARDIAN CLASS' : 'HOSTILE'}</span>
@@ -63,7 +64,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({ player, enemy, onActi
       </div>
 
       {/* Active Bot Status */}
-      <div className="bg-cyan-950/20 border border-cyan-900/50 p-3 rounded mb-4">
+      <div className="bg-cyan-950/20 border border-cyan-900/50 p-3 rounded mb-4 shrink-0">
          <div className="flex justify-between items-baseline mb-1">
           <h3 className="text-sm text-cyan-400 font-bold">{activeBot.name} (LVL {activeBot.level})</h3>
           <span className="text-xs text-cyan-300/50">HP {activeBot.hp}/{activeBot.maxHp}</span>
@@ -79,8 +80,8 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({ player, enemy, onActi
          ) : null}
       </div>
 
-      {/* Action Grid */}
-      <div className="flex-1 overflow-y-auto mb-4 pr-1 custom-scrollbar">
+      {/* Action Grid - Scrollable */}
+      <div className="flex-1 overflow-y-auto mb-4 pr-1 custom-scrollbar touch-pan-y">
         
         {menuState === 'MAIN' && (
           <div className="grid grid-cols-1 gap-2">
@@ -93,7 +94,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({ player, enemy, onActi
                   key={skill.id}
                   onClick={() => onAction(skill.id)}
                   className={`
-                    relative group border py-2 px-3 rounded text-left transition-all active:scale-95
+                    relative group border py-3 px-3 rounded text-left transition-all active:scale-95
                     ${skill.type === 'ATTACK' ? 'bg-red-900/20 border-red-500/50 text-red-400 hover:bg-red-900/40' : 
                       skill.type === 'TECH' ? 'bg-purple-900/20 border-purple-500/50 text-purple-400 hover:bg-purple-900/40' :
                       skill.type === 'DEFENSE' ? 'bg-blue-900/20 border-blue-500/50 text-blue-400 hover:bg-blue-900/40' :
@@ -113,7 +114,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({ player, enemy, onActi
             {!enemy.isBoss && (
                <button 
                   onClick={() => onAction('RECRUIT')}
-                  className={`bg-yellow-900/20 border border-yellow-500/50 hover:bg-yellow-900/40 text-yellow-400 py-2 px-3 rounded text-left transition-all active:scale-95`}
+                  className={`bg-yellow-900/20 border border-yellow-500/50 hover:bg-yellow-900/40 text-yellow-400 py-3 px-3 rounded text-left transition-all active:scale-95`}
                 >
                   <span className="font-bold uppercase tracking-wider text-sm block">ATTEMPT RECRUIT</span>
                   <div className="text-xs opacity-70 mt-1 leading-tight">
@@ -125,7 +126,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({ player, enemy, onActi
             {hasShieldMod && (
               <button 
                 onClick={() => onAction('SHIELD_MOD')}
-                className="bg-cyan-900/20 border border-cyan-500/50 hover:bg-cyan-900/40 text-cyan-400 py-2 px-3 rounded text-left transition-all active:scale-95"
+                className="bg-cyan-900/20 border border-cyan-500/50 hover:bg-cyan-900/40 text-cyan-400 py-3 px-3 rounded text-left transition-all active:scale-95"
               >
                 <span className="font-bold uppercase tracking-wider text-sm block">Shield Gen (Module)</span>
               </button>
@@ -134,14 +135,14 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({ player, enemy, onActi
             <div className="grid grid-cols-2 gap-2 mt-1">
                 <button 
                   onClick={() => setMenuState('ITEMS')}
-                  className="bg-slate-800 border border-slate-600 hover:bg-slate-700 text-slate-300 py-2 px-3 rounded text-left transition-all active:scale-95"
+                  className="bg-slate-800 border border-slate-600 hover:bg-slate-700 text-slate-300 py-3 px-3 rounded text-left transition-all active:scale-95"
                 >
                   <span className="font-bold uppercase tracking-wider text-sm block">ITEMS</span>
                 </button>
                 
                 <button 
                   onClick={() => setMenuState('SWITCH')}
-                  className="bg-slate-800 border border-slate-600 hover:bg-slate-700 text-slate-300 py-2 px-3 rounded text-left transition-all active:scale-95"
+                  className="bg-slate-800 border border-slate-600 hover:bg-slate-700 text-slate-300 py-3 px-3 rounded text-left transition-all active:scale-95"
                 >
                   <span className="font-bold uppercase tracking-wider text-sm block">SWITCH BOT</span>
                 </button>
@@ -157,7 +158,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({ player, enemy, onActi
                 key={bot.id}
                 disabled={bot.isDefeated || idx === player.activeSlot}
                 onClick={() => handleSwitch(idx)}
-                className={`w-full text-left p-2 border rounded flex justify-between items-center ${
+                className={`w-full text-left p-3 border rounded flex justify-between items-center ${
                   bot.isDefeated 
                     ? 'border-red-900 bg-red-950/20 opacity-50 cursor-not-allowed' 
                     : idx === player.activeSlot
@@ -175,7 +176,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({ player, enemy, onActi
             ))}
             <button 
               onClick={() => setMenuState('MAIN')}
-              className="w-full mt-2 py-2 text-center text-xs text-slate-500 hover:text-slate-300 border border-transparent hover:border-slate-700 rounded"
+              className="w-full mt-2 py-3 text-center text-xs text-slate-500 hover:text-slate-300 border border-transparent hover:border-slate-700 rounded"
             >
               CANCEL
             </button>
@@ -192,7 +193,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({ player, enemy, onActi
                <button
                 key={item.id}
                 onClick={() => handleUseItem(item.id)}
-                className="w-full text-left p-2 border border-slate-600 bg-slate-800 hover:border-cyan-400 rounded flex justify-between items-center"
+                className="w-full text-left p-3 border border-slate-600 bg-slate-800 hover:border-cyan-400 rounded flex justify-between items-center"
                >
                   <div>
                     <div className="font-bold text-sm text-cyan-200">{item.name} x{item.count}</div>
@@ -203,7 +204,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({ player, enemy, onActi
             ))}
              <button 
               onClick={() => setMenuState('MAIN')}
-              className="w-full mt-2 py-2 text-center text-xs text-slate-500 hover:text-slate-300 border border-transparent hover:border-slate-700 rounded"
+              className="w-full mt-2 py-3 text-center text-xs text-slate-500 hover:text-slate-300 border border-transparent hover:border-slate-700 rounded"
             >
               CANCEL
             </button>
@@ -213,7 +214,7 @@ const CombatInterface: React.FC<CombatInterfaceProps> = ({ player, enemy, onActi
       </div>
 
       {/* Logs */}
-      <div className="h-32 bg-black border border-slate-800 p-2 rounded overflow-y-auto text-xs font-mono shadow-inner shrink-0 custom-scrollbar">
+      <div className="h-32 bg-black border border-slate-800 p-2 rounded overflow-y-auto text-xs font-mono shadow-inner shrink-0 custom-scrollbar touch-pan-y">
           {logs.slice().reverse().map((log) => (
             <div key={log.id} className={`animate-log-entry mb-1 pl-2 border-l-2 ${
               log.type === 'enemy' ? 'border-red-500/50 bg-red-950/10 text-red-400' : 

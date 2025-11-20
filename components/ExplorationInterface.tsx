@@ -7,349 +7,316 @@ interface ExplorationInterfaceProps {
   player: Player;
   onHeal: () => void;
   onBuyModule: (module: Module) => void;
-  onMove: (dx: number, dy: number) => void;
-  onInteract: () => void;
   onSwitchBot: (index: number) => void;
   onUseItem: (item: Item, botIndex: number) => void;
   onSwapReserve: (teamIndex: number, reserveIndex: number) => void;
   onEquipSkill: (skillId: string, isEquipping: boolean) => void;
+  onInteract: () => void;
+  interactionLabel: string | null;
 }
 
 const ExplorationInterface: React.FC<ExplorationInterfaceProps> = ({ 
-  player, onHeal, onBuyModule, onMove, onInteract, onSwitchBot, onUseItem, onSwapReserve, onEquipSkill
+  player, onHeal, onBuyModule, onSwitchBot, onUseItem, onSwapReserve, onEquipSkill, onInteract, interactionLabel
 }) => {
   const [tab, setTab] = useState<'STATUS' | 'TEAM' | 'FAB'>('STATUS');
-  const [campMode, setCampMode] = useState(false);
+  const [skillMode, setSkillMode] = useState(false); // Toggle for Skill Management
 
   const activeBot = player.team[player.activeSlot];
-  const canHeal = player.scrap >= 15 && activeBot.hp < activeBot.maxHp;
-  const hasModule = (id: string) => activeBot.modules.some(m => m.id === id);
+  const isAtPod = player.pos.x === POD_POS.x && player.pos.y === POD_POS.y;
 
-  // Check if near pod to enable camp UI
-  const nearPod = player.pos.x === POD_POS.x && player.pos.y === POD_POS.y;
+  // Camp Mode (Reserves) - Only visible when at POD and selecting TEAM tab
+  if (isAtPod && tab === 'TEAM') {
+    return (
+      <div className="h-full flex flex-col bg-slate-900 border-l-4 border-slate-700 p-4 font-mono overflow-hidden">
+        <div className="mb-4 border-b-2 border-slate-700 pb-2 flex justify-between items-center shrink-0">
+          <h2 className="text-xl font-bold text-orange-500 tracking-widest">BASE CAMP</h2>
+          <button onClick={() => setTab('STATUS')} className="text-xs text-slate-400 border px-2 py-1 rounded hover:bg-slate-800">CLOSE</button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto custom-scrollbar touch-pan-y">
+           <div className="mb-4">
+              <h3 className="text-cyan-400 font-bold mb-2 text-sm">ACTIVE SQUAD (MAX 3)</h3>
+              {player.team.map((bot, idx) => (
+                <div key={bot.id} className="flex justify-between items-center bg-slate-800 p-3 mb-2 rounded border border-cyan-900/50">
+                   <div>
+                     <div className="text-sm font-bold text-white">{bot.name}</div>
+                     <div className="text-xs text-slate-400">{bot.class} LVL {bot.level}</div>
+                   </div>
+                   <button 
+                     onClick={() => onSwapReserve(idx, -1)}
+                     className="text-xs bg-slate-700 hover:bg-orange-700 text-white px-3 py-2 rounded"
+                   >
+                     TO RESERVE
+                   </button>
+                </div>
+              ))}
+           </div>
+
+           <div>
+              <h3 className="text-orange-400 font-bold mb-2 text-sm">RESERVES</h3>
+              {player.reserves.length === 0 && <div className="text-slate-600 italic text-xs">No bots in reserve.</div>}
+              {player.reserves.map((bot, idx) => (
+                <div key={bot.id} className="flex justify-between items-center bg-slate-800 p-3 mb-2 rounded border border-orange-900/50">
+                   <div>
+                     <div className="text-sm font-bold text-white">{bot.name}</div>
+                     <div className="text-xs text-slate-400">{bot.class} LVL {bot.level}</div>
+                   </div>
+                   <button 
+                     onClick={() => onSwapReserve(-1, idx)}
+                     className="text-xs bg-slate-700 hover:bg-cyan-700 text-white px-3 py-2 rounded"
+                   >
+                     TO SQUAD
+                   </button>
+                </div>
+              ))}
+           </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="h-full flex flex-col bg-slate-900 border-l-4 border-slate-800 font-mono overflow-hidden">
+    <div className="h-full flex flex-col bg-slate-900 border-l-4 border-slate-700 p-4 font-mono overflow-hidden relative">
       
-      {/* Top Bar: Quest Info */}
-      <div className="bg-orange-900/20 p-2 border-b border-orange-900/50">
-        <div className="flex justify-between items-center mb-1">
-           <span className="text-orange-500 font-bold text-xs tracking-widest">OBJECTIVE</span>
-           <span className="text-orange-400 text-xs">
-              {player.quest.stage === 'FIND_POD' && "LOCATE ESCAPE POD"}
-              {player.quest.stage === 'GATHER_PARTS' && `FIND PARTS (${player.quest.partsFound}/${player.quest.partsNeeded})`}
-              {player.quest.stage === 'DEFEAT_GUARDIAN' && "DEFEAT GUARDIAN"}
-              {player.quest.stage === 'REPAIR_POD' && "REPAIR POD"}
-           </span>
+      {/* Header */}
+      <div className="mb-4 border-b-2 border-slate-700 pb-2 flex justify-between items-center shrink-0">
+        <div>
+          <h2 className="text-xl font-bold text-slate-200 tracking-widest">DATA PAD</h2>
+          <div className="text-xs text-slate-400">
+             SCRAP: <span className="text-yellow-400 text-base">{player.scrap}</span>
+          </div>
         </div>
-        <div className="h-1 bg-slate-800 rounded overflow-hidden">
-           <div className="h-full bg-orange-500" style={{ 
-             width: player.quest.stage === 'COMPLETED' ? '100%' : 
-                    player.quest.stage === 'DEFEAT_GUARDIAN' ? '75%' :
-                    player.quest.stage === 'GATHER_PARTS' ? `${(player.quest.partsFound/player.quest.partsNeeded)*50 + 25}%` : '10%' 
-           }} />
+        <div className="text-right">
+          <div className="text-[10px] text-slate-500">COORDS</div>
+          <div className="text-xs text-cyan-400">{player.pos.x}, {player.pos.y}</div>
         </div>
+      </div>
+
+      {/* Quest Tracker */}
+      <div className="bg-slate-800/50 p-2 rounded mb-4 border border-slate-700 shrink-0">
+         <div className="text-[10px] text-slate-500 uppercase mb-1">Current Objective</div>
+         <div className="text-sm text-orange-300 leading-tight">
+            {player.quest.stage === 'FIND_POD' && "Locate the Escape Pod signal."}
+            {player.quest.stage === 'GATHER_PARTS' && `Find Hyperdrive Flux: ${player.quest.partsFound}/${player.quest.partsNeeded}`}
+            {player.quest.stage === 'DEFEAT_GUARDIAN' && "Defeat the Core Guardian!"}
+            {player.quest.stage === 'REPAIR_POD' && "Install Omni-Tool at Pod."}
+            {player.quest.stage === 'COMPLETED' && "Launch Sequence Ready."}
+         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-700 bg-slate-950">
-        <button onClick={() => { setTab('STATUS'); setCampMode(false); }} className={`flex-1 py-2 text-sm font-bold ${tab === 'STATUS' && !campMode ? 'text-cyan-400 bg-slate-900 border-t-2 border-cyan-500' : 'text-slate-500 hover:text-slate-300'}`}>STATUS</button>
-        <button onClick={() => { setTab('TEAM'); setCampMode(false); }} className={`flex-1 py-2 text-sm font-bold ${tab === 'TEAM' && !campMode ? 'text-cyan-400 bg-slate-900 border-t-2 border-cyan-500' : 'text-slate-500 hover:text-slate-300'}`}>TEAM</button>
-        
-        {nearPod ? (
-           <button onClick={() => setCampMode(true)} className={`flex-1 py-2 text-sm font-bold ${campMode ? 'text-green-400 bg-slate-900 border-t-2 border-green-500' : 'text-green-700 hover:text-green-500'}`}>CAMP</button>
-        ) : (
-           <button onClick={() => setTab('FAB')} className={`flex-1 py-2 text-sm font-bold ${tab === 'FAB' ? 'text-cyan-400 bg-slate-900 border-t-2 border-cyan-500' : 'text-slate-500 hover:text-slate-300'}`}>FAB</button>
-        )}
+      <div className="flex gap-1 mb-4 shrink-0">
+        {['STATUS', 'TEAM', 'FAB'].map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t as any)}
+            className={`flex-1 py-3 text-sm font-bold rounded transition-colors touch-manipulation ${
+              tab === t ? 'bg-cyan-700 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+            }`}
+          >
+            {t}
+          </button>
+        ))}
       </div>
 
-      {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+      {/* Scrollable Content Area */}
+      <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar touch-pan-y pb-16">
         
-        {/* CAMP MODE */}
-        {campMode && (
-           <div className="space-y-4">
-             <div className="text-green-400 text-sm font-bold text-center">BASE CAMP MANAGEMENT</div>
-             <p className="text-xs text-slate-500 text-center mb-2">Swap active bots with reserves.</p>
-             
-             <div className="space-y-2">
-               <div className="text-xs text-cyan-500 font-bold">ACTIVE SQUAD (MAX 3)</div>
-               {player.team.map((bot, idx) => (
-                 <div key={bot.id} className="p-2 border border-cyan-900 bg-cyan-950/20 rounded flex justify-between items-center">
-                    <span className="text-sm text-cyan-200">{bot.name}</span>
-                    {player.team.length > 1 && (
-                       <button 
-                        onClick={() => onSwapReserve(idx, -1)} // -1 means push to reserve
-                        className="text-[10px] bg-slate-800 text-slate-300 px-2 py-1 rounded hover:bg-red-900"
-                       >TO RESERVE</button>
-                    )}
+        {tab === 'STATUS' && (
+          <div className="space-y-4">
+            <div className="bg-slate-800 p-3 rounded border border-slate-600">
+               <div className="flex justify-between items-start">
+                 <div>
+                   <h3 className="text-lg text-white font-bold">{activeBot.name}</h3>
+                   <span className="text-xs text-cyan-400 uppercase">{activeBot.class} CLASS</span>
                  </div>
-               ))}
-             </div>
-
-             <div className="space-y-2 border-t border-slate-800 pt-2">
-               <div className="text-xs text-green-500 font-bold">RESERVES</div>
-               {player.reserves.length === 0 && <p className="text-xs text-slate-600 italic">No bots in reserve.</p>}
-               {player.reserves.map((bot, idx) => (
-                 <div key={bot.id} className="p-2 border border-green-900 bg-green-950/20 rounded flex justify-between items-center">
-                    <div>
-                      <div className="text-sm text-green-200">{bot.name}</div>
-                      <div className="text-[10px] text-slate-500">{bot.class} | LVL {bot.level}</div>
-                    </div>
-                    {player.team.length < 3 ? (
-                       <button 
-                        onClick={() => onSwapReserve(-1, idx)} // -1 means take from reserve
-                        className="text-[10px] bg-slate-800 text-slate-300 px-2 py-1 rounded hover:bg-cyan-900"
-                       >JOIN SQUAD</button>
-                    ) : (
-                       <span className="text-[10px] text-red-900">SQUAD FULL</span>
-                    )}
+                 <div className="text-right">
+                   <div className="text-2xl font-bold text-white">{activeBot.level}</div>
+                   <div className="text-[10px] text-slate-400">LEVEL</div>
                  </div>
-               ))}
-             </div>
-           </div>
-        )}
-
-        {/* Status Tab */}
-        {!campMode && tab === 'STATUS' && (
-          <>
-            <div className="bg-slate-950 p-4 rounded border border-slate-700 mb-4">
-              <h2 className="text-cyan-500 text-lg font-bold mb-1">{activeBot.name}</h2>
-              <p className="text-xs text-slate-500 mb-4 uppercase">CLASS: {activeBot.class}</p>
-              
-              <div className="mb-3">
-                <div className="flex justify-between text-sm mb-1 text-slate-300">
-                  <span>HULL</span>
-                  <span>{activeBot.hp}/{activeBot.maxHp}</span>
-                </div>
-                <div className="h-2 bg-slate-800 rounded overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-red-500 to-green-500" style={{ width: `${(activeBot.hp / activeBot.maxHp) * 100}%` }} />
-                </div>
-              </div>
-
-              <div className="mb-3">
-                <div className="flex justify-between text-sm mb-1 text-slate-300">
-                  <span>XP (LVL {activeBot.level})</span>
-                  <span>{activeBot.xp}/{activeBot.maxXp}</span>
-                </div>
-                <div className="h-1 bg-slate-800 rounded overflow-hidden">
-                  <div className="h-full bg-purple-500" style={{ width: `${(activeBot.xp / activeBot.maxXp) * 100}%` }} />
-                </div>
-              </div>
-
-               <div className="flex items-center gap-2 text-yellow-400 font-bold text-xl border-t border-slate-800 pt-2 mt-2">
-                <span>SCRAP:</span>
-                <span>{player.scrap}</span>
-              </div>
-            </div>
-
-            {/* SKILL MANAGEMENT UI */}
-            <div className="mb-4">
-              <h3 className="text-xs font-bold text-slate-400 mb-2 flex justify-between">
-                <span>MEMORY BANK (RAM)</span>
-                <span>{activeBot.activeSkills.length} / 3</span>
-              </h3>
-              
-              <div className="space-y-1 mb-3">
-                 {activeBot.activeSkills.map(skillId => {
-                   const skill = SKILLS_DB[skillId];
-                   return (
-                     <div key={skillId} className="flex justify-between items-center p-2 bg-cyan-950/30 border border-cyan-800 rounded">
-                       <div>
-                          <div className="text-xs font-bold text-cyan-400">{skill.name}</div>
-                          <div className="text-[10px] text-slate-500">{skill.type}</div>
-                       </div>
-                       <button 
-                        onClick={() => onEquipSkill(skillId, false)}
-                        className="text-[10px] bg-slate-800 text-slate-300 px-2 py-1 rounded hover:bg-slate-700"
-                       >UNLOAD</button>
-                     </div>
-                   )
-                 })}
-                 {activeBot.activeSkills.length === 0 && <div className="text-[10px] text-slate-600 italic">No active skills.</div>}
-              </div>
-
-              <h3 className="text-xs font-bold text-slate-400 mb-2">STORAGE</h3>
-              <div className="space-y-1">
-                 {activeBot.storedSkills.length === 0 && <div className="text-[10px] text-slate-600 italic">Storage empty.</div>}
-                 {activeBot.storedSkills.map(skillId => {
-                    const skill = SKILLS_DB[skillId];
-                    return (
-                      <div key={skillId} className="flex justify-between items-center p-2 bg-slate-900 border border-slate-800 rounded opacity-80">
-                        <div>
-                            <div className="text-xs font-bold text-slate-400">{skill.name}</div>
-                            <div className="text-[10px] text-slate-600">{skill.type}</div>
-                        </div>
-                        {activeBot.activeSkills.length < 3 ? (
-                          <button 
-                            onClick={() => onEquipSkill(skillId, true)}
-                            className="text-[10px] bg-slate-800 text-green-400 px-2 py-1 rounded hover:bg-slate-700"
-                          >LOAD</button>
-                        ) : (
-                          <span className="text-[10px] text-red-900">RAM FULL</span>
-                        )}
-                      </div>
-                    )
-                 })}
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-xs font-bold text-slate-500 mb-2">INVENTORY</h3>
-              {player.inventory.length === 0 && <p className="text-xs text-slate-600 italic">Empty</p>}
-              {player.inventory.map(item => (
-                 <button 
-                    key={item.id}
-                    onClick={() => item.effect !== 'QUEST' && onUseItem(item, player.activeSlot)}
-                    className={`w-full mb-2 p-2 bg-slate-800 border border-slate-700 rounded flex justify-between items-center ${item.effect === 'QUEST' ? 'border-orange-500/50' : 'hover:border-cyan-500'}`}
-                 >
-                    <div className="text-left">
-                      <div className={`text-sm font-bold ${item.effect === 'QUEST' ? 'text-orange-300' : 'text-cyan-200'}`}>{item.name} x{item.count}</div>
-                      <div className="text-[10px] text-slate-400">{item.description}</div>
-                    </div>
-                    {item.effect !== 'QUEST' && <span className="text-xs text-cyan-600">USE</span>}
-                 </button>
-              ))}
-            </div>
-          </>
-        )}
-
-        {/* Team Tab */}
-        {!campMode && tab === 'TEAM' && (
-           <div className="space-y-3">
-             {player.team.map((bot, idx) => (
-               <div key={bot.id} className={`p-3 rounded border ${idx === player.activeSlot ? 'bg-cyan-900/20 border-cyan-500' : 'bg-slate-800 border-slate-700'}`}>
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <div className={`font-bold ${bot.isDefeated ? 'text-red-500' : 'text-cyan-400'}`}>
-                        {bot.name} {bot.isDefeated && '(DESTROYED)'}
-                      </div>
-                      <div className="text-xs text-slate-500 uppercase">{bot.class} | LVL {bot.level}</div>
-                      {bot.personality && <div className="text-[10px] text-slate-500 italic">"{bot.personality}"</div>}
-                    </div>
-                    {idx !== player.activeSlot && !bot.isDefeated && (
-                      <button 
-                        onClick={() => onSwitchBot(idx)}
-                        className="text-[10px] bg-slate-700 hover:bg-cyan-700 text-white px-2 py-1 rounded"
-                      >
-                        MAKE ACTIVE
-                      </button>
-                    )}
-                    {idx === player.activeSlot && <span className="text-[10px] bg-cyan-800 text-cyan-100 px-2 py-1 rounded">ACTIVE</span>}
-                  </div>
-                  
-                  <div className="h-1 bg-slate-900 rounded overflow-hidden mb-1">
-                     <div className={`h-full ${bot.isDefeated ? 'bg-red-900' : 'bg-green-500'}`} style={{ width: `${(bot.hp / bot.maxHp) * 100}%` }} />
-                  </div>
-                  <div className="text-[10px] text-right text-slate-400">{bot.hp}/{bot.maxHp}</div>
                </div>
-             ))}
-           </div>
-        )}
+               
+               <div className="mt-3 space-y-1">
+                 <div className="flex justify-between text-xs">
+                    <span className="text-slate-400">HP</span>
+                    <span className="text-slate-200">{activeBot.hp} / {activeBot.maxHp}</span>
+                 </div>
+                 <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden">
+                    <div className="bg-green-500 h-full" style={{width: `${(activeBot.hp/activeBot.maxHp)*100}%`}}></div>
+                 </div>
 
-        {/* Fabricator Tab */}
-        {!campMode && tab === 'FAB' && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-yellow-400 font-bold text-sm mb-4">
-              SCRAP AVAILABLE: {player.scrap}
+                 <div className="flex justify-between text-xs mt-2">
+                    <span className="text-slate-400">XP</span>
+                    <span className="text-slate-200">{activeBot.xp} / {activeBot.maxXp}</span>
+                 </div>
+                 <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden">
+                    <div className="bg-purple-500 h-full" style={{width: `${(activeBot.xp/activeBot.maxXp)*100}%`}}></div>
+                 </div>
+               </div>
+               
+               <div className="mt-3 pt-3 border-t border-slate-700">
+                  <div className="text-xs text-slate-500 italic">"{activeBot.personality || 'System Normal.'}"</div>
+               </div>
             </div>
 
-            <button 
-              onClick={onHeal}
-              disabled={!canHeal}
-              className={`w-full text-left p-2 rounded border transition-all flex justify-between items-center group ${
-                canHeal 
-                ? 'bg-slate-800 border-green-900 hover:border-green-500 hover:bg-slate-700' 
-                : 'bg-slate-900 border-slate-800 opacity-50 cursor-not-allowed'
-              }`}
-            >
-              <div>
-                <div className="text-green-400 font-bold text-sm group-hover:text-green-300">QUICK REPAIR</div>
-                <div className="text-slate-500 text-xs">Repair Active Bot</div>
+            {/* Skill Management */}
+            <div className="bg-slate-800 p-3 rounded border border-slate-600">
+              <div className="flex justify-between items-center mb-2">
+                <h4 className="text-sm font-bold text-cyan-300">MEMORY BANK (SKILLS)</h4>
+                <button 
+                   onClick={() => setSkillMode(!skillMode)} 
+                   className="text-[10px] border border-slate-500 px-2 py-1 rounded hover:bg-slate-700 text-slate-300"
+                >
+                  {skillMode ? 'DONE' : 'EDIT'}
+                </button>
               </div>
-              <div className="text-yellow-600 font-bold text-sm">15</div>
-            </button>
+
+              <div className="mb-2">
+                 <div className="text-[10px] text-slate-500 mb-1">ACTIVE RAM ({activeBot.activeSkills.length}/3)</div>
+                 <div className="space-y-1">
+                    {activeBot.activeSkills.map(skillId => (
+                       <div key={skillId} className="flex justify-between items-center bg-slate-900/50 px-2 py-2 rounded border border-green-900/50">
+                          <span className="text-xs text-green-400">{SKILLS_DB[skillId]?.name || skillId}</span>
+                          {skillMode && (
+                            <button onClick={() => onEquipSkill(skillId, false)} className="text-[10px] text-red-400 hover:text-red-300 px-2 py-1">STORE</button>
+                          )}
+                       </div>
+                    ))}
+                 </div>
+              </div>
+
+              <div>
+                 <div className="text-[10px] text-slate-500 mb-1">STORAGE</div>
+                 {activeBot.storedSkills.length === 0 && <div className="text-xs text-slate-600 italic">Empty</div>}
+                 <div className="space-y-1">
+                    {activeBot.storedSkills.map(skillId => (
+                       <div key={skillId} className="flex justify-between items-center bg-slate-900/50 px-2 py-2 rounded border border-slate-700">
+                          <span className="text-xs text-slate-400">{SKILLS_DB[skillId]?.name || skillId}</span>
+                          {skillMode && activeBot.activeSkills.length < 3 && (
+                            <button onClick={() => onEquipSkill(skillId, true)} className="text-[10px] text-cyan-400 hover:text-cyan-300 px-2 py-1">EQUIP</button>
+                          )}
+                       </div>
+                    ))}
+                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === 'TEAM' && (
+          <div className="space-y-4">
+            <div className="space-y-2">
+               <h3 className="text-xs font-bold text-slate-500 uppercase">Squad Deployment</h3>
+               {player.team.map((bot, idx) => (
+                 <button
+                   key={bot.id}
+                   onClick={() => onSwitchBot(idx)}
+                   className={`w-full text-left p-3 rounded border flex justify-between items-center transition-all active:scale-95 ${
+                     idx === player.activeSlot 
+                       ? 'bg-cyan-900/20 border-cyan-500' 
+                       : 'bg-slate-800 border-slate-600 hover:border-slate-500'
+                   }`}
+                 >
+                   <div>
+                     <div className={`text-sm font-bold ${idx === player.activeSlot ? 'text-cyan-400' : 'text-slate-300'}`}>
+                       {bot.name}
+                     </div>
+                     <div className="text-xs text-slate-500">HP: {bot.hp}/{bot.maxHp}</div>
+                   </div>
+                   {idx === player.activeSlot && <span className="text-[10px] bg-cyan-900 text-cyan-300 px-1 rounded">ACTIVE</span>}
+                 </button>
+               ))}
+               {isAtPod && (
+                  <div className="text-xs text-center text-orange-400 mt-2">
+                     Camp detected. <br/> Use "Interact" on Pod to manage reserves.
+                  </div>
+               )}
+            </div>
+
+            <div className="space-y-2 pt-4 border-t border-slate-700">
+               <h3 className="text-xs font-bold text-slate-500 uppercase">Inventory</h3>
+               {player.inventory.length === 0 && (
+                 <div className="text-sm text-slate-600 italic text-center py-4">Empty</div>
+               )}
+               {player.inventory.map((item) => (
+                  <div key={item.id} className="bg-slate-800 p-2 rounded border border-slate-600 flex justify-between items-center">
+                     <div>
+                        <div className="text-sm text-cyan-200">{item.name} <span className="text-slate-500 text-xs">x{item.count}</span></div>
+                        <div className="text-[10px] text-slate-500">{item.description}</div>
+                     </div>
+                     {item.effect !== 'QUEST' && (
+                        <button 
+                          onClick={() => onUseItem(item, player.activeSlot)}
+                          className="text-xs bg-slate-700 hover:bg-cyan-700 text-white px-3 py-2 rounded active:scale-95"
+                        >
+                          USE
+                        </button>
+                     )}
+                  </div>
+               ))}
+            </div>
+          </div>
+        )}
+
+        {tab === 'FAB' && (
+          <div className="space-y-3">
+            <div className="bg-slate-800 p-3 rounded border border-slate-600 flex justify-between items-center">
+              <div>
+                <h4 className="text-sm font-bold text-green-400">Emergency Repairs</h4>
+                <div className="text-xs text-slate-400">Heal 20 HP</div>
+              </div>
+              <button 
+                onClick={onHeal}
+                disabled={player.scrap < 15 || activeBot.hp >= activeBot.maxHp}
+                className="bg-green-900/30 border border-green-600/50 text-green-400 px-4 py-2 rounded text-xs disabled:opacity-50 active:scale-95"
+              >
+                15 SCRAP
+              </button>
+            </div>
 
             <div className="h-px bg-slate-700 my-2"></div>
-            <div className="text-xs text-slate-500 mb-2 uppercase">Install Modules on {activeBot.name}</div>
+            <h3 className="text-xs font-bold text-slate-500 uppercase mb-2">Install Modules</h3>
 
             {AVAILABLE_MODULES.map(mod => {
-              const owned = hasModule(mod.id);
-              const canBuy = !owned && player.scrap >= mod.cost;
-
+              const alreadyHas = activeBot.modules.some(m => m.id === mod.id);
               return (
-                <button 
-                  key={mod.id}
-                  onClick={() => onBuyModule(mod)}
-                  disabled={!canBuy}
-                  className={`w-full text-left p-2 rounded border transition-all flex justify-between items-start group ${
-                    owned 
-                    ? 'bg-slate-800 border-cyan-900 opacity-70' 
-                    : canBuy
-                      ? 'bg-slate-800 border-slate-600 hover:border-cyan-400 hover:bg-slate-750'
-                      : 'bg-slate-900 border-slate-800 opacity-50 cursor-not-allowed'
-                  }`}
-                >
-                  <div>
-                    <div className={`font-bold text-sm ${owned ? 'text-cyan-600' : 'text-cyan-400'} group-hover:text-cyan-300`}>
-                      {mod.name} {owned && '(INSTALLED)'}
-                    </div>
-                    <div className="text-slate-500 text-[10px] leading-tight mt-1">{mod.description}</div>
+                <div key={mod.id} className="bg-slate-800 p-3 rounded border border-slate-600">
+                  <div className="flex justify-between mb-1">
+                    <span className="text-sm font-bold text-slate-200">{mod.name}</span>
+                    <span className="text-xs text-yellow-500">{mod.cost} SCRAP</span>
                   </div>
-                  {!owned && <div className="text-yellow-600 font-bold text-sm">{mod.cost}</div>}
-                </button>
+                  <p className="text-xs text-slate-400 mb-2">{mod.description}</p>
+                  <button
+                    onClick={() => onBuyModule(mod)}
+                    disabled={alreadyHas || player.scrap < mod.cost}
+                    className={`w-full py-3 rounded text-xs font-bold transition-all active:scale-95 ${
+                      alreadyHas 
+                        ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                        : player.scrap >= mod.cost
+                        ? 'bg-cyan-700 hover:bg-cyan-600 text-white'
+                        : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                    }`}
+                  >
+                    {alreadyHas ? 'INSTALLED' : 'FABRICATE'}
+                  </button>
+                </div>
               );
             })}
           </div>
         )}
-
       </div>
-
-      {/* Controls */}
-      <div className="bg-slate-950 border-t border-slate-800 p-4 shrink-0 select-none relative">
-        
-        {/* D-Pad */}
-        <div className="grid grid-cols-3 gap-2 max-w-[160px] mx-auto relative z-10">
-          <div />
+      
+      {/* INTERACT BUTTON */}
+      {interactionLabel && (
+        <div className="absolute bottom-4 left-4 right-4">
           <button 
-            className="bg-slate-800 hover:bg-cyan-900 active:bg-cyan-600 h-12 rounded-t-lg border-b-4 border-slate-900 active:border-b-0 active:mt-1 transition-all flex items-center justify-center text-cyan-400"
-            onClick={() => onMove(0, -1)}
-          >▲</button>
-          <div />
-          
-          <button 
-            className="bg-slate-800 hover:bg-cyan-900 active:bg-cyan-600 h-12 rounded-l-lg border-b-4 border-slate-900 active:border-b-0 active:mt-1 transition-all flex items-center justify-center text-cyan-400"
-            onClick={() => onMove(-1, 0)}
-          >◀</button>
-          <div className="bg-slate-900 rounded flex items-center justify-center">
-             <div className="w-2 h-2 rounded-full bg-cyan-500/20"></div>
-          </div>
-          <button 
-            className="bg-slate-800 hover:bg-cyan-900 active:bg-cyan-600 h-12 rounded-r-lg border-b-4 border-slate-900 active:border-b-0 active:mt-1 transition-all flex items-center justify-center text-cyan-400"
-            onClick={() => onMove(1, 0)}
-          >▶</button>
-
-          <div />
-          <button 
-            className="bg-slate-800 hover:bg-cyan-900 active:bg-cyan-600 h-12 rounded-b-lg border-b-4 border-slate-900 active:border-b-0 active:mt-1 transition-all flex items-center justify-center text-cyan-400"
-            onClick={() => onMove(0, 1)}
-          >▼</button>
-          <div />
+            onClick={onInteract}
+            className="w-full bg-yellow-600 hover:bg-yellow-500 text-white font-bold text-xl py-4 rounded-lg shadow-lg border-2 border-yellow-300 animate-bounce"
+          >
+            {interactionLabel}
+          </button>
         </div>
-
-        {/* Action Button */}
-        <button 
-          onClick={onInteract}
-          className={`absolute right-6 bottom-16 w-16 h-16 rounded-full border-4 active:scale-95 flex items-center justify-center shadow-lg ${
-             nearPod 
-             ? 'bg-green-700 border-green-900 active:bg-green-600 animate-pulse' 
-             : 'bg-yellow-700 border-yellow-900 active:bg-yellow-600'
-          }`}
-        >
-          <span className="font-bold text-yellow-100 text-xs">{nearPod ? 'POD' : 'ACT'}</span>
-        </button>
-
-      </div>
+      )}
     </div>
   );
 };
